@@ -1,0 +1,7 @@
+port: 8080
+hosts:
+  - localhost:8081
+  - localhost:8082
+balancer-type: round-robin
+max-header-kb: 10
+buffer-size-kb: 4
