@@ -26,7 +26,8 @@ func NewHttpProxyD(conf *Config) (HttpProxyD, error) {
 	hp, err := NewHttpProxy(
 		conf.Hosts,
 		WithBalancerOfType(conf.BalancerType),
-		WithBufferSize(conf.BufferSizeKb),
+		WithSlabSize(conf.SlabSizeKb),
+		WithMaxConcurrentRequests(conf.MaxConcurrentRequests),
 	)
 	if err != nil {
 		return HttpProxyD{}, err

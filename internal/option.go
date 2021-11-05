@@ -13,8 +13,9 @@ const (
 )
 
 var (
-	DefaultBalancer   Balancer = &roundRobinBalancer{}
-	DefaultBufferSize          = os.Getpagesize()
+	DefaultBalancer              Balancer = &roundRobinBalancer{}
+	DefaultSlabSize                       = os.Getpagesize()
+	DefaultMaxConcurrentRequests          = 4
 )
 
 func WithBalancerOfType(typ string) option {
@@ -38,12 +39,17 @@ func WithBalancerOfType(typ string) option {
 	}
 }
 
-func WithBufferSize(s int) option {
-	return option{bufferSize: s}
+func WithSlabSize(s int) option {
+	return option{slabSize: s}
+}
+
+func WithMaxConcurrentRequests(r int) option {
+	return option{maxConcReqs: r}
 }
 
 type option struct {
-	balancer   Balancer
-	bufferSize int
-	err        error
+	balancer    Balancer
+	slabSize    int
+	maxConcReqs int
+	err         error
 }

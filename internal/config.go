@@ -3,27 +3,28 @@ package internal
 import (
 	"errors"
 	"fmt"
-	"os"
 
 	"github.com/spf13/viper"
 )
 
 type config struct {
-	Host         *string  `mapstructure:"host"`
-	Port         *int     `mapstructure:"port"`
-	Hosts        []string `mapstructure:"hosts"`
-	BalancerType *string  `mapstructure:"balancer-type"`
-	MaxHeaderKb  *int     `mapstructure:"max-header-kb"`
-	BufferSizeKb *int     `mapstructure:"buffer-size-kb"`
+	Host                  *string  `mapstructure:"host"`
+	Port                  *int     `mapstructure:"port"`
+	Hosts                 []string `mapstructure:"hosts"`
+	BalancerType          *string  `mapstructure:"balancer-type"`
+	MaxHeaderKb           *int     `mapstructure:"max-header-kb"`
+	SlabSizeKb            *int     `mapstructure:"slab-size-kb"`
+	MaxConcurrentRequests *int     `mapstructure:"max-concurrent-requests"`
 }
 
 type Config struct {
-	Host         string
-	Port         int
-	Hosts        []string
-	BalancerType string
-	MaxHeaderKb  int
-	BufferSizeKb int
+	Host                  string
+	Port                  int
+	Hosts                 []string
+	BalancerType          string
+	MaxHeaderKb           int
+	SlabSizeKb            int
+	MaxConcurrentRequests int
 }
 
 func (c *Config) String() string {
@@ -33,13 +34,15 @@ func (c *Config) String() string {
 			"hosts: %v\n"+
 			"balancer-type: %s\n"+
 			"max-header: %d bytes\n"+
-			"buffer-size: %d bytes\n",
+			"slab-size: %d bytes\n"+
+			"max-concurrent-requests: %d\n",
 		c.Host,
 		c.Port,
 		c.Hosts,
 		c.BalancerType,
 		c.MaxHeaderKb,
-		c.BufferSizeKb,
+		c.SlabSizeKb,
+		c.MaxConcurrentRequests,
 	)
 }
 
@@ -50,7 +53,6 @@ func LoadConfig(path string) (*Config, error) {
 		DefaultPort         = 8080
 		DefaultBalancerType = RoundRobinBalancer
 		DefaultMaxHeaderKb  = Kilobyte
-		DefaultBufferSizeKb = os.Getpagesize()
 	)
 
 	conf := new(config)
@@ -83,8 +85,12 @@ func LoadConfig(path string) (*Config, error) {
 		conf.MaxHeaderKb = &DefaultMaxHeaderKb
 	}
 
-	if conf.BufferSizeKb == nil {
-		conf.BufferSizeKb = &DefaultBufferSizeKb
+	if conf.SlabSizeKb == nil {
+		conf.SlabSizeKb = &DefaultSlabSize
+	}
+
+	if conf.MaxConcurrentRequests == nil {
+		conf.MaxConcurrentRequests = &DefaultMaxConcurrentRequests
 	}
 
 	if *conf.Port < 0 || *conf.Port > 1<<16 {
@@ -95,23 +101,28 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, errors.New("hosts cannot be empty")
 	}
 
-	if *conf.BufferSizeKb < 1 {
-		return nil, errors.New("buffer-size-kb must be positive")
+	if *conf.SlabSizeKb < 1 {
+		return nil, errors.New("slab-size-kb must be positive")
 	}
 
 	if *conf.MaxHeaderKb < 1 {
 		return nil, errors.New("max-header-kb must be positive")
 	}
 
-	*conf.BufferSizeKb *= Kilobyte
+	if *conf.MaxConcurrentRequests < 1 {
+		return nil, errors.New("max-concurrent-requests must be positive")
+	}
+
+	*conf.SlabSizeKb *= Kilobyte
 	*conf.MaxHeaderKb *= Kilobyte
 
 	return &Config{
-		Host:         *conf.Host,
-		Port:         int(*conf.Port),
-		Hosts:        conf.Hosts,
-		BalancerType: *conf.BalancerType,
-		MaxHeaderKb:  int(*conf.MaxHeaderKb),
-		BufferSizeKb: int(*conf.BufferSizeKb),
+		Host:                  *conf.Host,
+		Port:                  *conf.Port,
+		Hosts:                 conf.Hosts,
+		BalancerType:          *conf.BalancerType,
+		MaxHeaderKb:           *conf.MaxHeaderKb,
+		SlabSizeKb:            *conf.SlabSizeKb,
+		MaxConcurrentRequests: *conf.MaxConcurrentRequests,
 	}, nil
 }

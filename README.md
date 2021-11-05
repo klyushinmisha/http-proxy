@@ -25,7 +25,8 @@ port: 8080
 hosts: [localhost:8081 localhost:8082]
 balancer-type: round-robin
 max-header: 10240 bytes
-buffer-size: 4096 bytes
+slab-size: 4096 bytes
+max-concurrent-requests: 4
 ```
 
 ## Load balancing

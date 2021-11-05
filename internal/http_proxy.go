@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -9,7 +8,7 @@ import (
 
 type HttpProxy struct {
 	hosts    []string
-	buffer   []byte
+	slabs    *SlabList
 	balancer Balancer
 }
 
@@ -18,17 +17,24 @@ func NewHttpProxy(hosts []string, opts ...option) (*HttpProxy, error) {
 		hosts: hosts,
 	}
 
-	bufferSize := DefaultBufferSize
+	slabSize := DefaultSlabSize
+	maxConcurrentRequests := DefaultMaxConcurrentRequests
 
 	for _, opt := range opts {
 		if opt.err != nil {
 			return nil, opt.err
 		}
+
 		if opt.balancer != nil {
 			hp.balancer = opt.balancer
 		}
-		if opt.bufferSize != 0 {
-			bufferSize = opt.bufferSize
+
+		if opt.slabSize != 0 {
+			slabSize = opt.slabSize
+		}
+
+		if opt.maxConcReqs != 0 {
+			maxConcurrentRequests = opt.maxConcReqs
 		}
 	}
 
@@ -36,45 +42,47 @@ func NewHttpProxy(hosts []string, opts ...option) (*HttpProxy, error) {
 		hp.balancer = DefaultBalancer
 	}
 
-	hp.buffer = make([]byte, bufferSize)
+	hp.slabs = NewSlabList(maxConcurrentRequests, slabSize)
 
 	return hp, nil
 }
 
-func (hp HttpProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+func (hp *HttpProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
 
-	err := hp.proxy(rw, req)
-	if err != nil {
-		rw.WriteHeader(502)
-		rw.Write([]byte("Bad gateway"))
+	if err := hp.proxy(rw, req); err != nil {
+		rw.WriteHeader(http.StatusBadGateway)
 		return
 	}
 }
 
-func (hp HttpProxy) proxy(rw http.ResponseWriter, req *http.Request) error {
+func (hp *HttpProxy) proxy(rw http.ResponseWriter, req *http.Request) error {
 	req = hp.newProxyRequest(req)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return errors.New("bad gateway")
+		return err
 	}
 
 	copyHeader(resp.Header, rw.Header())
 	rw.Header().Add("Server", Title)
 	rw.Header().Add(ProxyIDHeader, ProxyID.String())
 
-	_, err = io.CopyBuffer(rw, resp.Body, hp.buffer)
+	slab := hp.slabs.Pop()
+	_, err = io.CopyBuffer(rw, resp.Body, slab)
+	hp.slabs.Push(slab)
 
 	return err
 }
 
-func (hp HttpProxy) newProxyRequest(req *http.Request) *http.Request {
+func (hp *HttpProxy) newProxyRequest(req *http.Request) *http.Request {
 	var user *url.Userinfo
 	if req.URL.User != nil {
 		user = new(url.Userinfo)
 		*user = *req.URL.User
 	}
+
+	host := hp.balancer.Host(hp.hosts)
 
 	return &http.Request{
 		Method:        req.Method,
@@ -87,7 +95,7 @@ func (hp HttpProxy) newProxyRequest(req *http.Request) *http.Request {
 			Scheme:      "http",
 			Opaque:      req.URL.Opaque,
 			User:        user,
-			Host:        hp.balancer.Host(hp.hosts),
+			Host:        host,
 			Path:        req.URL.Path,
 			RawPath:     req.URL.RawPath,
 			ForceQuery:  req.URL.ForceQuery,
