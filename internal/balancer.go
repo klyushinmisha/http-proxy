@@ -3,7 +3,6 @@ package internal
 import (
 	"math/rand"
 	"sync"
-	"sync/atomic"
 )
 
 type Balancer interface {
@@ -11,16 +10,19 @@ type Balancer interface {
 }
 
 type roundRobinBalancer struct {
-	ptr int64
+	mux sync.Mutex
+	pos int
 }
 
 func (b *roundRobinBalancer) Host(hosts []string) string {
-	host := hosts[b.ptr]
+	b.mux.Lock()
 
-	v := (int(b.ptr) + 1) % len(hosts)
-	atomic.StoreInt64(&b.ptr, int64(v))
+	i := b.pos
+	b.pos = (b.pos + 1) % len(hosts)
 
-	return host
+	b.mux.Unlock()
+
+	return hosts[i]
 }
 
 type randomBalancer struct {
