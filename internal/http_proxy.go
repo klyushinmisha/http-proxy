@@ -4,11 +4,14 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+
+	"golang.org/x/sync/semaphore"
 )
 
 type HttpProxy struct {
 	hosts    []string
-	slabs    *SlabList
+	sem      *semaphore.Weighted
+	slabs    *SlabPool
 	balancer Balancer
 }
 
@@ -42,13 +45,21 @@ func NewHttpProxy(hosts []string, opts ...option) (*HttpProxy, error) {
 		hp.balancer = DefaultBalancer
 	}
 
-	hp.slabs = NewSlabList(maxConcurrentRequests, slabSize)
+	hp.sem = semaphore.NewWeighted(int64(maxConcurrentRequests))
+	hp.slabs = NewSlabPool(maxConcurrentRequests, slabSize)
 
 	return hp, nil
 }
 
 func (hp *HttpProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
+
+	if !hp.sem.TryAcquire(1) {
+		rw.WriteHeader(http.StatusTooManyRequests)
+		return
+	}
+
+	defer hp.sem.Release(1)
 
 	if err := hp.proxy(rw, req); err != nil {
 		rw.WriteHeader(http.StatusBadGateway)
@@ -68,9 +79,9 @@ func (hp *HttpProxy) proxy(rw http.ResponseWriter, req *http.Request) error {
 	rw.Header().Add("Server", Title)
 	rw.Header().Add(ProxyIDHeader, ProxyID.String())
 
-	slab := hp.slabs.Pop()
-	_, err = io.CopyBuffer(rw, resp.Body, slab)
-	hp.slabs.Push(slab)
+	slab := hp.slabs.Get()
+	_, err = io.CopyBuffer(rw, resp.Body, *slab)
+	hp.slabs.Put(slab)
 
 	return err
 }
