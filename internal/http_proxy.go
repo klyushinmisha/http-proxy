@@ -46,7 +46,7 @@ func NewHttpProxy(hosts []string, opts ...option) (*HttpProxy, error) {
 	}
 
 	hp.sem = semaphore.NewWeighted(int64(maxConcurrentRequests))
-	hp.slabs = NewSlabPool(maxConcurrentRequests, slabSize)
+	hp.slabs = NewSlabPool(slabSize)
 
 	return hp, nil
 }

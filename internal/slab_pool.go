@@ -8,15 +8,11 @@ type SlabPool struct {
 	pool sync.Pool
 }
 
-func NewSlabPool(capacity int, slabSize int) *SlabPool {
+func NewSlabPool(slabSize int) *SlabPool {
 	sl := &SlabPool{}
 	sl.pool.New = func() interface{} {
 		slab := make([]byte, slabSize)
 		return &slab
-	}
-
-	for i := 0; i < capacity; i++ {
-		sl.pool.New()
 	}
 
 	return sl

@@ -14,7 +14,7 @@ func popPush(pool *SlabPool, wg *sync.WaitGroup) {
 func Benchmark_SlabList_Alloc(b *testing.B) {
 	const cap = 1000
 
-	pool := NewSlabPool(cap, os.Getpagesize())
+	pool := NewSlabPool(os.Getpagesize())
 
 	b.ResetTimer()
 
